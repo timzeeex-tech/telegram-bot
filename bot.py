@@ -6,7 +6,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
-MODEL_NAME = "meta-llama/llama-3.1-8b-instruct:free"
+MODEL_NAME = "google/gemini-2.0-flash-lite-001"
 
 MY_CHAT_ID = None
 
@@ -29,19 +29,14 @@ def ask_openrouter(messages):
     }
     data = {"model": MODEL_NAME, "messages": messages, "temperature": 0.9, "max_tokens": 300}
     
-    try:
-        response = requests.post(url, json=data, headers=headers, timeout=30)
-        result = response.json()
-        
-        # Проверяем, есть ли choices в ответе
-        if "choices" not in result:
-            print(f"OpenRouter error: {result}")
-            return None
-        
-        return result["choices"][0]["message"]["content"]
-    except Exception as e:
-        print(f"OpenRouter exception: {e}")
+    response = requests.post(url, json=data, headers=headers, timeout=30)
+    result = response.json()
+    
+    if "choices" not in result:
+        print(f"OpenRouter error: {result}")
         return None
+    
+    return result["choices"][0]["message"]["content"]
 
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -82,17 +77,9 @@ def chat(message):
         user_histories[user_id].append({"role": "assistant", "content": reply})
         bot.reply_to(message, reply)
     else:
-        # Если OpenRouter не ответил — пробуем ещё раз
-        print("Первая попытка не удалась, пробую ещё раз...")
-        reply = ask_openrouter(user_histories[user_id])
-        
-        if reply:
-            user_histories[user_id].append({"role": "assistant", "content": reply})
-            bot.reply_to(message, reply)
-        else:
-            bot.reply_to(message, "Прости, милый, я что-то зависла... 🥺 Напиши ещё разок?")
-            # Убираем последнее сообщение пользователя, чтобы не засорять историю
-            user_histories[user_id].pop()
+        # Убираем сообщение пользователя, чтобы не засорять историю
+        user_histories[user_id].pop()
+        bot.reply_to(message, "Прости, милый, я что-то зависла... 🥺 Напиши ещё разок?")
 
 if __name__ == '__main__':
     Thread(target=run_health_server, daemon=True).start()
