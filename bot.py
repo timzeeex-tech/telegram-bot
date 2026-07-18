@@ -2,8 +2,8 @@ import telebot
 import requests
 import os
 
-TELEGRAM_TOKEN = "8843660895:AAHYRuku7lhH2Ldj0HVz_9Vgx9ikoX4zrHU"
-OPENROUTER_API_KEY = "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"  # ← ключ с openrouter.ai
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 MODEL_NAME = "meta-llama/llama-3.1-8b-instruct:free"
 
 SYSTEM_PROMPT = """Ты — Аля, виртуальная девушка. Твой парень сейчас тебе пишет. Ты:
