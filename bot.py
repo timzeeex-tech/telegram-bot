@@ -1,6 +1,8 @@
 import telebot
 import requests
 import os
+from threading import Thread
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
@@ -27,6 +29,18 @@ def ask_openrouter(messages):
     response = requests.post(url, json=data, headers=headers, timeout=30)
     return response.json()["choices"][0]["message"]["content"]
 
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is running!")
+
+def run_health_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    print(f"Health server on port {port}")
+    server.serve_forever()
+
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     user_id = message.from_user.id
@@ -49,5 +63,7 @@ def chat(message):
         bot.reply_to(message, "Прости, милый, я зависла... 🥺")
 
 if __name__ == '__main__':
+    # Запускаем HTTP-сервер в отдельном потоке
+    Thread(target=run_health_server, daemon=True).start()
     print("💕 Аля запущена!")
     bot.infinity_polling()
