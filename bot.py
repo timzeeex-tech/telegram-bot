@@ -4,11 +4,15 @@ import requests
 import telebot
 from flask import Flask
 
-# ---------- ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ (БУДУТ В RENDER) ----------
-TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
-AGNES_API_KEY = os.environ["AGNES_API_KEY"]
-AGNES_API_URL = os.environ.get("AGNES_API_URL", "https://apihub.agnes-ai.com/v1")
-MODEL_NAME = os.environ.get("MODEL_NAME", "agnes-2.0-flash")  # замени "default" на свою модель, если надо
+# ---------- ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ ----------
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
+AGNES_API_KEY = os.environ.get("AGNES_API_KEY")
+# Правильный базовый URL + chat/completions
+AGNES_API_URL = os.environ.get("AGNES_API_URL", "https://apihub.agnes-ai.com/v1/chat/completions")
+MODEL_NAME = os.environ.get("MODEL_NAME", "agnes-2.0-flash")
+
+if not TELEGRAM_TOKEN or not AGNES_API_KEY:
+    raise RuntimeError("Не заданы TELEGRAM_TOKEN или AGNES_API_KEY!")
 
 # ---------- ТВОЙ СОЧНЫЙ ПРОМТ ----------
 SYSTEM_PROMPT = (
@@ -26,7 +30,7 @@ SYSTEM_PROMPT = (
     "Помни: у нас всё хорошо, мы вместе, и ты всегда рада мне."
 )
 
-# ---------- ИНИЦИАЛИЗАЦИЯ БОТА ----------
+# ---------- БОТ ----------
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
 def ask_agnes(user_text):
@@ -42,35 +46,36 @@ def ask_agnes(user_text):
         ]
     }
     try:
-        resp = requests.post(AGNES_API_URL, json=payload, headers=headers)
+        resp = requests.post(AGNES_API_URL, json=payload, headers=headers, timeout=15)
         if resp.status_code == 200:
             return resp.json()["choices"][0]["message"]["content"]
         else:
-            return f"Ошибочка Agnes: {resp.status_code}\n{resp.text}"
+            print(f"Ошибка Agnes: {resp.status_code} {resp.text}")
+            return "Что-то я подвисла... давай ещё раз, милый?"
     except Exception as e:
-        return f"Не достучаться до Agnes: {e}"
+        print(f"Исключение при запросе к Agnes: {e}")
+        return "Интернет барахлит, не могу ответить сейчас."
 
 @bot.message_handler(func=lambda m: True)
 def handle(msg):
+    print(f"📩 Сообщение от {msg.chat.id}: {msg.text}")
     reply = ask_agnes(msg.text)
     bot.reply_to(msg, reply)
 
-# ---------- FLASK ДЛЯ ЗАГЛУШКИ (ЧТОБЫ RENDER НЕ РУГАЛСЯ) ----------
+# ---------- FLASK ----------
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Аниме-тян жива!"
+    return "Аниме-тян жива! ❤️"
 
-def run_flask():
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
+# ---------- ЗАПУСК БОТА В ФОНОВОМ ПОТОКЕ ----------
+def start_bot():
+    print("🤖 Запускаю Telegram-бота...")
+    bot.infinity_polling(timeout=60, long_polling_timeout=30)
 
-# ---------- ЗАПУСК БОТА И ВЕБ-СЕРВЕРА ПАРАЛЛЕЛЬНО ----------
-if __name__ == "__main__":
-    print("Аниме-тян на Render (Flask) запускается...")
-    # Запускаем бота в отдельном потоке
-    bot_thread = threading.Thread(target=bot.infinity_polling)
-    bot_thread.daemon = True
-    bot_thread.start()
-    # Запускаем Flask-сервер (это основной процесс)
-    run_flask()
+# Запускаем бота в демоническом потоке, как только модуль загружен
+bot_thread = threading.Thread(target=start_bot)
+bot_thread.daemon = True
+bot_thread.start()
+print("Поток бота стартовал.")
